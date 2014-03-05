@@ -220,7 +220,8 @@ def get_all():
 
 
 def get_interval(from_year, to_year):
-    if to_year > from_year or from_year < 1901 or to_year > date.today().year:
+
+    if from_year > to_year or from_year < 1901 or to_year > date.today().year + 1:
         logger.error("Bad year interval, only valid: ({0}, {1})".format(1901, date.today().year))
         exit(1)
 
