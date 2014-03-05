@@ -3,6 +3,7 @@ import logging
 import threading
 import gzip
 import shutil
+from datetime import date
 from ftplib import FTP
 from ftplib import error_perm, error_reply
 
@@ -25,6 +26,11 @@ logger = logging.getLogger(__name__)
 formatter = logging.Formatter('%(asctime)s - %(threadName)s - %(levelname)s - %(message)s')
 pool_semaphore = threading.BoundedSemaphore(value=MAX_NUM_JOBS)
 
+logger.setLevel(logging.DEBUG)
+ch = logging.StreamHandler()
+ch.setLevel(logging.DEBUG)
+ch.setFormatter(formatter)
+logger.addHandler(ch)
 
 class YearDataError(Exception):
     def __init__(self, code):
@@ -209,15 +215,17 @@ class YearData(threading.Thread):
             raise YearDataError(err_text)
 
 
-def main():
-    logger.setLevel(logging.DEBUG)
-    ch = logging.StreamHandler()
-    ch.setLevel(logging.DEBUG)
-    ch.setFormatter(formatter)
-    logger.addHandler(ch)
+def get_all():
+    get_interval(1901, date.today().year)
+
+
+def get_interval(from_year, to_year):
+    if to_year > from_year or from_year < 1901 or to_year > date.today().year:
+        logger.error("Bad year interval, only valid: ({0}, {1})".format(1901, date.today().year))
+        exit(1)
 
     jobs = list()
-    for i in range(1901, 1904):
+    for i in range(from_year, to_year + 1):
         y = YearData(i, ish=True)
         y.start()
         jobs.append(y)
@@ -226,5 +234,7 @@ def main():
         j.join()
 
 
-if __name__ == "__main__":
-    main()
+def get_year(year):
+    y = YearData(year, ish=True)
+    y.start()
+    y.join()
