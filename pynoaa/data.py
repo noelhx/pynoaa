@@ -24,7 +24,7 @@ LOCAL_DATA_OUTPUT_ISH = "../../output-ish/"
 MAX_NUM_JOBS = 4             # number of parallel tasks (this is not the number of concurrent downloads)
 MAX_NUM_FTP_CONNECTIONS = 1  # limited by NOAA server to only 1
 NUM_RETRIES = 3              # retries for trying to retrieve all data from a given year
-FTP_CONN_TIMEOUT = 1        # ftp connection timeout in seconds
+FTP_CONN_TIMEOUT = 30        # ftp connection timeout in seconds
 
 pool_semaphore = threading.BoundedSemaphore(value=MAX_NUM_JOBS)
 ftp_semaphore = threading.BoundedSemaphore(value=MAX_NUM_FTP_CONNECTIONS)
