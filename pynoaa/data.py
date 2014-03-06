@@ -20,17 +20,21 @@ LOCAL_DATA_OUTPUT = "../../output/"
 LOCAL_DATA_OUTPUT_ISH = "../../output-ish/"
 
 MAX_NUM_JOBS = 4
+MAX_NUM_FTP_CONNECTIONS = 1  # limited by NOAA server to only 1
 NUM_RETRIES = 3
+
+pool_semaphore = threading.BoundedSemaphore(value=MAX_NUM_JOBS)
+ftp_semaphore = threading.BoundedSemaphore(value=MAX_NUM_FTP_CONNECTIONS)
 
 logger = logging.getLogger(__name__)
 formatter = logging.Formatter('%(asctime)s - %(threadName)s - %(levelname)s - %(message)s')
-pool_semaphore = threading.BoundedSemaphore(value=MAX_NUM_JOBS)
 
 logger.setLevel(logging.DEBUG)
 ch = logging.StreamHandler()
 ch.setLevel(logging.DEBUG)
 ch.setFormatter(formatter)
 logger.addHandler(ch)
+
 
 class YearDataError(Exception):
     def __init__(self, code):
@@ -79,7 +83,7 @@ class YearData(threading.Thread):
                 while True:
                     self.get_list_pending_files()
                     if self.is_all_data_downloaded():
-                        logger.info("All files has been downloaded")
+                        logger.info("All files have been downloaded")
                         break
                     elif 0 < attempt < NUM_RETRIES:
                         logger.warning(
@@ -91,7 +95,8 @@ class YearData(threading.Thread):
                         raise YearDataError(err_text)
                     self.download_files()
                     attempt += 1
-
+                # finished downloading files, free ftp connection
+                self.disconnect()
                 # decompress files
                 self.decompress()
                 # merge files
@@ -104,16 +109,21 @@ class YearData(threading.Thread):
             except YearDataError as err:
                 logger.error(err)
             finally:
-                self.disconnect()
+                if self.ftp is not None:
+                    self.disconnect()
 
     def connect(self):
         try:
+            ftp_semaphore.acquire(blocking=True)
             self.ftp = FTP(host=SERVER_URL)
             self.ftp.login(user=USER, passwd=PASSWORD, )
+            self.ftp.set_pasv(False)
             logger.info("Login to FTP successfully")
-        except error_perm:
-            logger.error("Login to FTP failed")
-            return 1
+        except error_perm as err:
+            err_test = "Login to FTP failed: {0}".format(err)
+            logger.error(err_test)
+            self.disconnect()
+            raise YearDataError(err_test)
 
     def disconnect(self):
         try:
@@ -121,6 +131,9 @@ class YearData(threading.Thread):
             logger.info("Disconnected from FTP successfully")
         except error_reply:
             self.ftp.close()
+        finally:
+            self.ftp = None
+            ftp_semaphore.release()
 
     def get_list_remote_files(self):
         # change directory
@@ -216,12 +229,12 @@ class YearData(threading.Thread):
 
 
 def get_all():
-    get_interval(1901, date.today().year)
+    get_interval(1901, 1910)
 
 
 def get_interval(from_year, to_year):
 
-    if from_year > to_year or from_year < 1901 or to_year > date.today().year + 1:
+    if to_year < from_year or from_year < 1901 or to_year > date.today().year + 1:
         logger.error("Bad year interval, only valid: ({0}, {1})".format(1901, date.today().year))
         exit(1)
 
