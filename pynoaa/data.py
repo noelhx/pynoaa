@@ -3,6 +3,7 @@ import logging
 import threading
 import gzip
 import shutil
+import socket
 from datetime import date
 from ftplib import FTP
 from ftplib import error_perm, error_reply
@@ -10,6 +11,7 @@ from ftplib import error_perm, error_reply
 import ish
 
 SERVER_URL = "ftp.ncdc.noaa.gov"
+SERVER_PORT = 21
 USER = "anonymous"
 PASSWORD = ""
 NOAA_BASE_DIR = "/pub/data/noaa/"
@@ -19,9 +21,10 @@ LOCAL_DATA_DECOMPRESS = "decompress/"
 LOCAL_DATA_OUTPUT = "../../output/"
 LOCAL_DATA_OUTPUT_ISH = "../../output-ish/"
 
-MAX_NUM_JOBS = 4
+MAX_NUM_JOBS = 4             # number of parallel tasks (this is not the number of concurrent downloads)
 MAX_NUM_FTP_CONNECTIONS = 1  # limited by NOAA server to only 1
-NUM_RETRIES = 3
+NUM_RETRIES = 3              # retries for trying to retrieve all data from a given year
+FTP_CONN_TIMEOUT = 1        # ftp connection timeout in seconds
 
 pool_semaphore = threading.BoundedSemaphore(value=MAX_NUM_JOBS)
 ftp_semaphore = threading.BoundedSemaphore(value=MAX_NUM_FTP_CONNECTIONS)
@@ -115,10 +118,17 @@ class YearData(threading.Thread):
     def connect(self):
         try:
             ftp_semaphore.acquire(blocking=True)
-            self.ftp = FTP(host=SERVER_URL)
+            self.ftp = FTP(timeout=None)
+            self.ftp.connect(host=SERVER_URL, port=SERVER_PORT, timeout=FTP_CONN_TIMEOUT)
             self.ftp.login(user=USER, passwd=PASSWORD, )
             self.ftp.set_pasv(False)
             logger.info("Login to FTP successfully")
+        except socket.timeout as err:
+            self.ftp = None
+            ftp_semaphore.release()
+            err_test = "Can't connect to server: {0}".format(err)
+            logger.error(err_test)
+            raise YearDataError(err_test)
         except error_perm as err:
             err_test = "Login to FTP failed: {0}".format(err)
             logger.error(err_test)
@@ -129,7 +139,7 @@ class YearData(threading.Thread):
         try:
             self.ftp.quit()
             logger.info("Disconnected from FTP successfully")
-        except error_reply:
+        except (error_reply, OSError):
             self.ftp.close()
         finally:
             self.ftp = None
@@ -154,7 +164,7 @@ class YearData(threading.Thread):
         # get the list of files from remote server
         try:
             self.get_list_remote_files()
-        except error_perm as err:
+        except (error_perm, socket.timeout, OSError) as err:
             err_text = "Error while getting remote list directory: {0}".format(err)
             logger.error(err_text)
             raise YearDataError(err_text)
@@ -182,14 +192,21 @@ class YearData(threading.Thread):
         logger.info("Ready for downloading {0} files, {1} bytes".format(self.pending_files_total_num,
                                                                         self.pending_files_total_size))
         for file, metadata in self.remote_files.items():
+            new_file = self.raw_data_dir + file
             try:
-                with open(self.raw_data_dir + file, "wb") as f:
+                with open(new_file, "wb") as f:
                     cmd = 'RETR {fname}'.format(fname=file)
                     self.ftp.retrbinary(cmd, f.write)
                 self.files[file] = metadata
             except error_perm as err:
                 logger.error("Error downloading file: {0}".format(err))
                 self.files_not_downloaded.append((file, metadata))
+            except socket.timeout as err:
+                logger.warning("Timeout downloading file: {0}".format(err))
+                try:
+                    os.remove(new_file)
+                except OSError as err:
+                    logger.warning("Couldn't delete file {0}: {1}".format(new_file, err))
 
     def is_all_data_downloaded(self):
         if not os.path.exists(self.raw_data_dir):
