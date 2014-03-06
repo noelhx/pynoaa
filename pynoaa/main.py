@@ -28,7 +28,8 @@ def main():
         print("Starting retrieving data for interval: ({0}, {1})".format(init_year, end_year))
         get_interval(init_year, end_year)
     else:
-        pass  #get_year(args.year)
+        print("Starting retrieving data for year: {0}".format(args.year))
+        get_year(args.year)
 
 
 if __name__ == "__main__":
