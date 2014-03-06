@@ -48,7 +48,24 @@ class YearDataError(Exception):
 
 
 class YearData(threading.Thread):
+    """Manages al the logic for retrieving, decompressing, formatting and
+    merging data of a given year.
+
+    It will create its own thread to connect to the remote ftp server for
+    downloading data and the for performing the necessary operations over
+    that data
+    """
+
     def __init__(self, year, ish=True):
+        """
+        The only argument that the thread needs is the year the user wants
+        to retrieve. There is also one optional argument for indicating if
+        an additional ish file must be generated.
+
+        Args:
+           year (int): The year to be processed.
+           ish (bool): if True, a ish file will be also generated.
+        """
         super(YearData, self).__init__()
         self.year = year
         self.ish = ish
@@ -72,6 +89,16 @@ class YearData(threading.Thread):
         self.files_not_downloaded = list()
 
     def run(self):
+        """
+        This method contains the code that the thread executes. It runs thread-
+        safe for avoiding too many operations running at the same time and also
+        having more that one FTP connection at the same time (limitation os the
+        NOAA server).
+
+        It calls the methods that connect to the server, download the data and
+        then transform the data to the desired output. There are some mechanism
+        for retrying whenever a download fails or another error occurs.
+        """
         with pool_semaphore:
             try:
                 self.connect()
@@ -98,7 +125,7 @@ class YearData(threading.Thread):
                         raise YearDataError(err_text)
                     self.download_files()
                     attempt += 1
-                # finished downloading files, free ftp connection
+                    # finished downloading files, free ftp connection
                 self.disconnect()
                 # decompress files
                 self.decompress()
@@ -116,6 +143,13 @@ class YearData(threading.Thread):
                     self.disconnect()
 
     def connect(self):
+        """
+        This method performs the remote FTP connection to the NOAA server. In
+        case of failure it will raise an exception and then the thread will end.
+
+        Raises:
+           YearDataError: indicates the cause of the ftp connection error.
+        """
         try:
             ftp_semaphore.acquire(blocking=True)
             self.ftp = FTP(timeout=None)
@@ -136,6 +170,10 @@ class YearData(threading.Thread):
             raise YearDataError(err_test)
 
     def disconnect(self):
+        """
+        Disconnects from the FTP server. The next thread in the pool is then
+        allowed to start a new connection.
+        """
         try:
             self.ftp.quit()
             logger.info("Disconnected from FTP successfully")
@@ -146,6 +184,12 @@ class YearData(threading.Thread):
             ftp_semaphore.release()
 
     def get_list_remote_files(self):
+        """
+        Gets the list of all files in the ftp for the given year. This lists
+        contains both the file name and the metadata of each file. This
+        method is normally used by :func:`get_list_pending_files` for comparing
+        local and remote list of files.
+        """
         # change directory
         self.ftp.sendcmd(cmd="CWD " + self.remote_year_path)
         # get the list of all remote files
@@ -161,6 +205,14 @@ class YearData(threading.Thread):
                 self.remote_files_total_num += 1
 
     def get_list_pending_files(self):
+        """
+        Get the list of pending files to be downloaded. It checks for each file
+        in the ftp if it has already been downloaded and if the local file is
+        not corrupted. If some error occurs a :class:`YearDataError` is raised.
+
+        Raises:
+           YearDataError indicates the cause of the error.
+        """
         # get the list of files from remote server
         try:
             self.get_list_remote_files()
@@ -189,6 +241,11 @@ class YearData(threading.Thread):
             raise YearDataError(err_test)
 
     def download_files(self):
+        """
+        This method downloads all files that were previously marked ad pending
+        by :func:`get_list_pending_files`. If there is any error when the file
+        is being downloaded, it is marked for a later retry.
+        """
         logger.info("Ready for downloading {0} files, {1} bytes".format(self.pending_files_total_num,
                                                                         self.pending_files_total_size))
         for file, metadata in self.remote_files.items():
@@ -209,6 +266,12 @@ class YearData(threading.Thread):
                     logger.warning("Couldn't delete file {0}: {1}".format(new_file, err))
 
     def is_all_data_downloaded(self):
+        """
+        Checks if we have finished downloading all files from a given year.
+
+        Returns:
+           True if all files have been downloaded.
+        """
         if not os.path.exists(self.raw_data_dir):
             return False
 
@@ -218,6 +281,9 @@ class YearData(threading.Thread):
             return False
 
     def decompress(self):
+        """
+        Decompresses all downloaded files.
+        """
         logger.info("Decompressing files")
         for file, _ in self.files.items():
             new_filename = str(self.raw_data_uncompressed_dir + file).replace(".gz", "")
@@ -226,6 +292,9 @@ class YearData(threading.Thread):
             self.files_decompressed.append(new_filename)
 
     def merge(self):
+        """
+        Merges into one file all decompressed files.
+        """
         logger.info("Merging decompressed files")
         self.output_file = self.output_data_dir + str(self.year)
         with open(self.output_file, 'wb') as fw:
@@ -246,11 +315,19 @@ class YearData(threading.Thread):
 
 
 def get_all():
-    get_interval(1901, 1910)
+    """
+    This function tries to retrieve and process all data from FTP server. It
+    calls :func:`get_interval` starting from 1901 (first year with data) and
+    finishing in the current year.
+    """
+    get_interval(1901, date.today().year)
 
 
 def get_interval(from_year, to_year):
-
+    """
+    Retrieves data from two years (both years inclusive). Range must be valid,
+    starting from 1901.
+    """
     if to_year < from_year or from_year < 1901 or to_year > date.today().year + 1:
         logger.error("Bad year interval, only valid: ({0}, {1})".format(1901, date.today().year))
         exit(1)
@@ -266,6 +343,9 @@ def get_interval(from_year, to_year):
 
 
 def get_year(year):
+    """
+    Retrieves a single year data.
+    """
     y = YearData(year, ish=True)
     y.start()
     y.join()
