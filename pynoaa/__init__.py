@@ -1,1 +1,1 @@
-__author__ = 'jabaldonedo'
+from .data import get_interval, get_year

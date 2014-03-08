@@ -8,7 +8,7 @@ from datetime import date
 from ftplib import FTP
 from ftplib import error_perm, error_reply
 
-import ish
+from .ish import convert
 
 SERVER_URL = "ftp.ncdc.noaa.gov"
 SERVER_PORT = 21
@@ -56,7 +56,7 @@ class YearData(threading.Thread):
     that data
     """
 
-    def __init__(self, year, ish=True):
+    def __init__(self, year, ish=True, out_dir=None):
         """
         The only argument that the thread needs is the year the user wants
         to retrieve. There is also one optional argument for indicating if
@@ -65,16 +65,23 @@ class YearData(threading.Thread):
         Args:
            year (int): The year to be processed.
            ish (bool): if True, a ish file will be also generated.
+           out_dir (str): string indicating the base output directory
         """
         super(YearData, self).__init__()
+
+        if out_dir is None:
+            out_dir = LOCAL_DATA
+        else:
+            self.create_directory(out_dir)
+
         self.year = year
         self.ish = ish
         self.name = "year:{0}".format(year)
-        self.raw_data_dir = LOCAL_DATA + str(year) + "/" + LOCAL_DATA_RAW_DIR
-        self.raw_data_uncompressed_dir = LOCAL_DATA + str(year) + "/" + LOCAL_DATA_DECOMPRESS
-        self.output_data_dir = LOCAL_DATA + str(year) + "/" + LOCAL_DATA_OUTPUT
-        self.output_ish_data_dir = LOCAL_DATA + str(year) + "/" + LOCAL_DATA_OUTPUT_ISH
-        self.remote_year_path = NOAA_BASE_DIR + str(year) + "/"
+        self.raw_data_dir = out_dir + str(year) + "/" + LOCAL_DATA_RAW_DIR
+        self.raw_data_uncompressed_dir = out_dir + str(year) + "/" + LOCAL_DATA_DECOMPRESS
+        self.output_data_dir = out_dir + str(year) + "/" + LOCAL_DATA_OUTPUT
+        self.output_ish_data_dir = out_dir + str(year) + "/" + LOCAL_DATA_OUTPUT_ISH
+        self.remote_year_path = out_dir + str(year) + "/"
         self.output_file = None
         self.output_file_ish = None
         self.ftp = None
@@ -135,7 +142,7 @@ class YearData(threading.Thread):
                 if self.ish:
                     logger.info("Building ish output")
                     self.output_file_ish = self.output_ish_data_dir + str(self.year) + "_ish"
-                    ish.convert(self.output_file, self.output_file_ish)
+                    convert(self.output_file, self.output_file_ish)
             except YearDataError as err:
                 logger.error(err)
             finally:
@@ -314,16 +321,16 @@ class YearData(threading.Thread):
             raise YearDataError(err_text)
 
 
-def get_all():
+def get_all(out_dir=None):
     """
     This function tries to retrieve and process all data from FTP server. It
     calls :func:`get_interval` starting from 1901 (first year with data) and
     finishing in the current year.
     """
-    get_interval(1901, date.today().year)
+    get_interval(1901, date.today().year, out_dir)
 
 
-def get_interval(from_year, to_year):
+def get_interval(from_year, to_year, out_dir=None):
     """
     Retrieves data from two years (both years inclusive). Range must be valid,
     starting from 1901.
@@ -334,7 +341,7 @@ def get_interval(from_year, to_year):
 
     jobs = list()
     for i in range(from_year, to_year + 1):
-        y = YearData(i, ish=True)
+        y = YearData(i, ish=True, out_dir=out_dir)
         y.start()
         jobs.append(y)
 
@@ -342,10 +349,10 @@ def get_interval(from_year, to_year):
         j.join()
 
 
-def get_year(year):
+def get_year(year, out_dir=None):
     """
     Retrieves a single year data.
     """
-    y = YearData(year, ish=True)
+    y = YearData(year, ish=True, out_dir=out_dir)
     y.start()
     y.join()
