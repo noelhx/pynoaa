@@ -15,7 +15,8 @@ SERVER_PORT = 21
 USER = "anonymous"
 PASSWORD = ""
 NOAA_BASE_DIR = "/pub/data/noaa/"
-LOCAL_DATA = "./data/raw/"
+
+LOCAL_DATA = os.path.join(os.path.realpath(__file__) + "./data/raw/")
 LOCAL_DATA_RAW_DIR = "raw/"
 LOCAL_DATA_DECOMPRESS = "decompress/"
 LOCAL_DATA_OUTPUT = "../../output/"
