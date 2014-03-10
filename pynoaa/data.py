@@ -16,11 +16,12 @@ USER = "anonymous"
 PASSWORD = ""
 NOAA_BASE_DIR = "/pub/data/noaa/"
 
-LOCAL_DATA = os.path.join(os.path.realpath(__file__) + "./data/raw/")
-LOCAL_DATA_RAW_DIR = "raw/"
-LOCAL_DATA_DECOMPRESS = "decompress/"
-LOCAL_DATA_OUTPUT = "../../output/"
-LOCAL_DATA_OUTPUT_ISH = "../../output-ish/"
+BASE_DIR = os.path.dirname(os.path.realpath(__file__))
+LOCAL_DATA = os.path.realpath(os.path.join(BASE_DIR, "data/"))
+LOCAL_DATA_RAW_DIR = os.path.realpath(os.path.join(LOCAL_DATA, "raw/"))
+LOCAL_DATA_DECOMPRESS = os.path.realpath(os.path.join(LOCAL_DATA, "decompress/"))
+LOCAL_DATA_OUTPUT = os.path.realpath(os.path.join(BASE_DIR, "output/"))
+LOCAL_DATA_OUTPUT_ISH = os.path.realpath(os.path.join(BASE_DIR, "output-ish/"))
 
 MAX_NUM_JOBS = 4             # number of parallel tasks (this is not the number of concurrent downloads)
 MAX_NUM_FTP_CONNECTIONS = 1  # limited by NOAA server to only 1
@@ -71,18 +72,22 @@ class YearData(threading.Thread):
         super(YearData, self).__init__()
 
         if out_dir is None:
-            out_dir = LOCAL_DATA
+            out = LOCAL_DATA_OUTPUT
+            out_ish = LOCAL_DATA_OUTPUT_ISH
         else:
-            self.create_directory(out_dir)
+            out = os.path.join(out_dir, "plain_format/")
+            out_ish = os.path.join(out_dir, "ish_format/")
+            self.create_directory(out)
+            self.create_directory(out_ish)
 
         self.year = year
         self.ish = ish
         self.name = "year:{0}".format(year)
-        self.raw_data_dir = out_dir + str(year) + "/" + LOCAL_DATA_RAW_DIR
-        self.raw_data_uncompressed_dir = out_dir + str(year) + "/" + LOCAL_DATA_DECOMPRESS
-        self.output_data_dir = out_dir + str(year) + "/" + LOCAL_DATA_OUTPUT
-        self.output_ish_data_dir = out_dir + str(year) + "/" + LOCAL_DATA_OUTPUT_ISH
-        self.remote_year_path = out_dir + str(year) + "/"
+        self.raw_data_dir = os.path.join(LOCAL_DATA_RAW_DIR, str(year) + "/")
+        self.raw_data_uncompressed_dir = os.path.join(LOCAL_DATA_DECOMPRESS, str(year) + "/")
+        self.output_data_dir = out
+        self.output_ish_data_dir = out_ish
+        self.remote_year_path = NOAA_BASE_DIR + str(year) + "/"
         self.output_file = None
         self.output_file_ish = None
         self.ftp = None
@@ -320,6 +325,10 @@ class YearData(threading.Thread):
             err_text = "Error creating directory: {0}".format(err)
             logger.error(err_text)
             raise YearDataError(err_text)
+
+    @staticmethod
+    def set_directories(base_path):
+        pass
 
 
 def get_all(out_dir=None):
