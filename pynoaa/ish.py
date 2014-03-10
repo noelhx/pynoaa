@@ -401,7 +401,7 @@ def get_aax(line, aax_name, ax_format):
 
         if pcp_val == "9999":
             setattr(line_data, pcp_id, '*****')
-        elif pcp.isdecimal():
+        elif pcp_val.isdecimal():
             set_pcp(float(pcp_val), hours, trace)
         else:
             setattr(line_data, pcp_id, '*****')
