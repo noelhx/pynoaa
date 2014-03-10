@@ -121,12 +121,15 @@ def convert(input_filename, output_filename):
                                                                                       day=cds.cds_day,
                                                                                       hour=cds.cds_hour,
                                                                                       minute=cds.cds_minute)
+
             mandatory_data = " ".join(
                 [mds.mds_dir, mds.mds_spd, oc1.oc1_gus, mds.mds_clg, gf1.gf1_skc, gf1.gf1_low, gf1.gf1_med, gf1.gf1_hi,
                  mds.mds_vsb] + mw + aw + [ay1.ay1_pw, mds.mds_temp, mds.mds_dewp, mds.mds_slp, ma1.ma1_alt,
                                            ma1.ma1_stp, ka1.ka1_max_temp, ka1.ka1_min_temp]) + " " + "".join(
                 [pcp.pcp01, pcp.pcp01t, pcp.pcp06, pcp.pcp06t, pcp.pcp24, pcp.pcp24t, pcp.pcp12,
-                 pcp.pcp12t]) + aj1.aj1_sd
+                 pcp.pcp12t]) + str(aj1.aj1_sd)
+
+
 
             out_line = control_data + mandatory_data + "\n"
             fout.write(out_line)
@@ -161,7 +164,7 @@ def get_mandatory_data_section(line):
         line_data.mds_clg = "***"
     else:
         if line_data.mds_clg.isdecimal():
-            line_data.mds_clg = int(line_data.mds_clg)
+            line_data.mds_clg = str(line_data.mds_clg)
         else:
             line_data.mds_clg = format_blank(int((float(line_data.mds_clg) * 3.281) / 100.0 + 0.5), 3)
 
@@ -352,6 +355,8 @@ def get_ka1(line):
 
         if line_data.ka1_temp == "+9999":
             line_data.ka1_temp = "***"
+            setattr(line_data, "ka1_max_temp", "***")
+            setattr(line_data, "ka1_min_temp", "***")
         else:
             setattr(line_data, "ka1_max_temp", "***")
             setattr(line_data, "ka1_min_temp", "***")
@@ -369,7 +374,7 @@ def get_ka1(line):
                     setattr(line_data, "ka1_max_temp", "{:>3}".format(temp))
             else:
                 line_data.ka1_temp = "***"
-            return line_data
+        return line_data
     else:
         ret = Ka1()
         ret.__setattr__("ka1_max_temp", "***")
