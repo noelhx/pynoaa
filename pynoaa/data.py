@@ -271,7 +271,7 @@ class YearData(threading.Thread):
             except error_perm as err:
                 logger.error("Error downloading file: {0}".format(err))
                 self.files_not_downloaded.append((file, metadata))
-            except socket.timeout as err:
+            except (OSError, socket.timeout) as err:
                 logger.warning("Timeout downloading file: {0}".format(err))
                 try:
                     os.remove(new_file)
